@@ -33,16 +33,23 @@ struct config{
        int L2size;
        };
 
+//Structure to model the blocks
+
 struct block{
     int blockSize;
     bitset<32> startAddress;
     bool isValid;
 };
 
+//Structure for hit
+
 struct hit{
     bool isHit;
     int hitWay;
 };
+
+//Structure to bundle the eviction data. Contains information if the write leads to an eviction or not.
+//and if it does, returns the evicted block.
 
 struct writeReturn{
     bool isEvicted;
@@ -57,10 +64,14 @@ class cache {
       }
 */
 class cache{
+
+    //Given Attributes of a cache
     int cacheSize;
     int setSize;
     int blockSize;
 
+
+    //To be computed attributes from the given data
     int sets;
     int ways;
 
@@ -68,26 +79,30 @@ class cache{
     int index;
     int offset;
 
+    //Round-robin counter for each set to store the information about the previous eviction.
+
     vector<int> counter;
 
+    //List of blocks to store the information of the blocks such as the validity and the address of the data
+    //the block contains.
     vector<block> blocks;
 
     //constructor
     public:
-    cache(int cacheSize, int setSize, int blockSize){
+    cache(int cache_Size, int set_Size, int block_Size){
         //Initializing values
-        this->cacheSize = cacheSize*1024;   //KiloBytes
-        this->setSize = setSize;
-        this->blockSize = blockSize;
+        cacheSize = cache_Size*1024;   //The provided cache size is in KiloBytes. Got to convert it into bytes.
+        setSize = set_Size;            //Associativity or the number of ways
+        blockSize = block_Size;
 
         //calculating number of sets and ways
         if(setSize == 0){       //If the setSize is 0, it is fully associative. Hence there is only one set
             sets = 1;
-            ways = cacheSize/blockSize;
+            ways = (cacheSize)/blockSize;
         }
         else{                   //Else the set size indicates the associativity i.e., the number of ways
             ways = setSize;
-            sets = (cacheSize*1024/ways)/blockSize;
+            sets = (cacheSize/ways)/blockSize;
         }
         //Number of blocks = Number of ways * Number of sets
         blocks.resize(ways*sets);
@@ -98,18 +113,35 @@ class cache{
         index = log2(sets);
         tag = 32 - offset - index;
         //Initialize all the round-robin counters to 0;
+        cout<<offset<<" "<<index<<" "<<tag<<" ";
 
         for(int i=0; i<sets; i++){
             counter[i] = 0;
         }
 
-        //Invalidate all the cache blocks
+        //Invalidate all the cache blocks. Done here in a set first basis
         for(int i=0; i<sets; i++){
             for(int j=0; j<ways; j++){
                 blocks[(i*ways)+j].isValid = false;
             }
         }
+
+        //Done with constructor. So all the parameters of the cache have been set.
     }
+
+
+    //Operations a cache can perform.
+
+    //A cache can be read or written.
+    //Here are the helper methods which help you do so.
+    //These helper methods are basically dumb and they read or write without actually checking any condition
+    //and do not make any changes to the cache.
+    //These conditions should be handled in the main method when these methods are accessed.
+
+
+    //The Read method checks if the passed address is present in the cache
+    //and returns an object of type 'hit' which contains the info if it is a hit or not.
+    //And also the way in which it was a hit if it was a hit.
 
     hit Read(bitset<32> address){
 
@@ -117,20 +149,29 @@ class cache{
         string tagString = addressString.substr(0,tag);
         string indexString = addressString.substr(tag,index);
 
-        //bitset<tag> tagBits = bitset<tag>(tagString);
-        //bitset<index> indexBits = bitset<index>(indexString);
-
         //int tagValue = btoi(tagString);
         int indexValue = btoi(indexString);
 
-        //long tagValue = tagBits.to_ulong();
-        //long indexValue = indexBits.to_ulong();
+        //The offset bits are simply ignored because it is enough if we look for the start address of the block
+
         hit h;
+
+        //Initializing the hit object to 'false'
+        //The address is searched for in the cache. If it found, it is set to true. If not it is simply returned as
+        //it is without updating.
+
         h.isHit = false;
         h.hitWay = -1;
-        //Search in each way
+
+        //Search in each way of the set at the calculated index.
         for(int i=0; i<ways; i++){
+            //The block 'current' is the block in focus for this iteration.
+            //I'm assuming that the blocks are laid in set-first basis.
             block current = blocks[indexValue*ways+i];
+
+            //The 'startAddress' variable of each block contains the address of the first block of the data it contains.
+            //The tag can be extracted from this address.
+
             string currentTag = current.startAddress.to_string().substr(0,tag);
             if(current.isValid && currentTag==tagString){
                 h.isHit = true;
@@ -141,6 +182,10 @@ class cache{
         return h;
     }
 
+
+    //The write method writes into the cache at the passed address no matter what.
+    //It returns information if the write has lead to an eviction or not.
+
     writeReturn Write(bitset<32> address){
 
         writeReturn w;
@@ -150,12 +195,9 @@ class cache{
             string indexString = addressString.substr(tag,index);
             string offsetString = "";
 
-            //bitset<tag> tagBits = bitset<tag>(tagString);
-            //bitset<index> indexBits = bitset<index>(indexString);
-
             int indexValue = btoi(indexString);
 
-            //long indexValue = indexBits.to_ulong();
+            //The offset is set to 0. i.e. to address the first byte in the block.
 
             for(int i=0; i<offset; i++){
                 offsetString = offsetString+"0";
@@ -169,10 +211,14 @@ class cache{
             temp.startAddress = bitset<32> (addressString);
             hit h = Read(address);
             //Check if the address to be written is present in the cache
-            //If it is present just update the value
+            //If it is present just update the data.
             if(h.isHit){
                 int hitWay = h.hitWay;
                 blocks[indexValue*ways+hitWay] = temp;
+                w.isEvicted = false;
+                return w;
+                //Should break.....
+
             }
             //Else Check if any of the blocks in the set is empty
             else{
@@ -227,6 +273,7 @@ int main(int argc, char* argv[]){
    // Implement by you:
    // initialize the hirearch cache system with those configs
    // probably you may define a Cache class for L1 and L2, or any data structure you like
+
       cache L1Cache(cacheconfig.L1size, cacheconfig.L1setsize, cacheconfig.L1blocksize);
       cache L2Cache(cacheconfig.L2size, cacheconfig.L2setsize, cacheconfig.L2blocksize);
 
